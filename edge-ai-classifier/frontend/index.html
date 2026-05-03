@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Edge AI Classifier — Demo</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --accent: #6366f1;
+      --accent2: #8b5cf6;
+      --text: #e2e8f0;
+      --text-muted: #64748b;
+      --success: #10b981;
+      --border: #2d3148;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    header {
+      width: 100%;
+      padding: 1.25rem 2rem;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    header .logo { font-size: 1.4rem; }
+    header h1 { font-size: 1.1rem; font-weight: 600; }
+    header .badge {
+      margin-left: auto;
+      background: var(--accent);
+      color: white;
+      font-size: 0.7rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      font-weight: 600;
+    }
+
+    main {
+      width: 100%;
+      max-width: 880px;
+      padding: 2.5rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+
+    .card h2 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 1rem;
+    }
+
+    /* Drop zone */
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 3rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+    }
+
+    .drop-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(99, 102, 241, 0.07);
+    }
+
+    .drop-zone input[type="file"] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer;
+    }
+
+    .drop-zone .icon { font-size: 2.5rem; margin-bottom: 0.75rem; }
+    .drop-zone p { color: var(--text-muted); font-size: 0.9rem; }
+    .drop-zone span { color: var(--accent); font-weight: 600; }
+
+    /* Preview */
+    #preview-wrap {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    #preview-img {
+      max-height: 280px;
+      max-width: 100%;
+      border-radius: 8px;
+      object-fit: contain;
+      border: 1px solid var(--border);
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.65rem 1.4rem;
+      border-radius: 8px;
+      border: none;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { opacity: 0.88; }
+    .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover { border-color: var(--accent); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+
+    /* Loader */
+    #loader { display: none; align-items: center; gap: 0.75rem; color: var(--text-muted); }
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Results */
+    #results { display: none; }
+    .meta-row {
+      display: flex; gap: 1rem; flex-wrap: wrap;
+      margin-bottom: 1.25rem;
+    }
+    .meta-pill {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.35rem 0.75rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .meta-pill span { color: var(--text); font-weight: 600; }
+
+    .pred-list { display: flex; flex-direction: column; gap: 0.75rem; }
+    .pred-item { display: flex; flex-direction: column; gap: 0.3rem; }
+    .pred-label-row {
+      display: flex; justify-content: space-between;
+      font-size: 0.88rem;
+    }
+    .pred-label { font-weight: 500; }
+    .pred-conf { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+    .pred-conf.top { color: var(--success); font-weight: 700; }
+
+    .bar-track {
+      height: 6px; background: var(--surface2);
+      border-radius: 999px; overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%; border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      transition: width 0.6s cubic-bezier(.22,1,.36,1);
+    }
+    .bar-fill.top { background: linear-gradient(90deg, var(--success), #34d399); }
+
+    /* Error */
+    .error-box {
+      background: rgba(239,68,68,0.08);
+      border: 1px solid rgba(239,68,68,0.3);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      font-size: 0.88rem;
+      color: #f87171;
+      display: none;
+    }
+
+    /* Model info */
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 0.75rem;
+    }
+    .info-cell {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.85rem 1rem;
+    }
+    .info-cell .label { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
+    .info-cell .value { font-size: 1rem; font-weight: 700; color: var(--text); }
+    .info-cell .value.green { color: var(--success); }
+    .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--success); margin-right: 6px; }
+
+    footer {
+      margin-top: auto;
+      padding: 1.5rem;
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      text-align: center;
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="logo">🧠</span>
+  <h1>Edge AI Image Classifier</h1>
+  <span class="badge">MobileNetV2 · INT8</span>
+</header>
+
+<main>
+
+  <!-- Upload card -->
+  <div class="card">
+    <h2>Upload Image</h2>
+    <div class="drop-zone" id="drop-zone">
+      <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp" />
+      <div class="icon">📸</div>
+      <p>Drag & drop an image here, or <span>browse to upload</span></p>
+      <p style="margin-top:0.4rem; font-size:0.78rem;">JPEG · PNG · WebP — max 10 MB</p>
+    </div>
+
+    <div id="preview-wrap">
+      <img id="preview-img" alt="Preview" />
+      <div class="btn-row">
+        <button class="btn btn-primary" id="classify-btn" disabled>⚡ Classify</button>
+        <button class="btn btn-secondary" id="clear-btn">✕ Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loader -->
+  <div id="loader">
+    <div class="spinner"></div>
+    Running inference…
+  </div>
+
+  <!-- Error -->
+  <div class="error-box" id="error-box"></div>
+
+  <!-- Results card -->
+  <div class="card" id="results">
+    <h2>Predictions</h2>
+
+    <div class="meta-row" id="meta-row"></div>
+    <div class="pred-list" id="pred-list"></div>
+  </div>
+
+  <!-- Model info card -->
+  <div class="card" id="model-info-card">
+    <h2>Model Info</h2>
+    <div class="info-grid" id="info-grid">
+      <div class="info-cell">
+        <div class="label">Status</div>
+        <div class="value" id="info-status">Connecting…</div>
+      </div>
+      <div class="info-cell">
+        <div class="label">Model</div>
+        <div class="value" id="info-name">—</div>
+      </div>
+      <div class="info-cell">
+        <div class="label">Size</div>
+        <div class="value green" id="info-size">—</div>
+      </div>
+      <div class="info-cell">
+        <div class="label">Classes</div>
+        <div class="value" id="info-classes">—</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  Edge AI Image Classifier — <a href="/docs" target="_blank">API Docs</a> ·
+  <a href="https://github.com/YOUR_USERNAME/edge-ai-classifier" target="_blank">GitHub</a>
+</footer>
+
+<script>
+  const API = "http://localhost:8000";
+
+  // ── DOM refs ──
+  const dropZone    = document.getElementById("drop-zone");
+  const fileInput   = document.getElementById("file-input");
+  const previewWrap = document.getElementById("preview-wrap");
+  const previewImg  = document.getElementById("preview-img");
+  const classifyBtn = document.getElementById("classify-btn");
+  const clearBtn    = document.getElementById("clear-btn");
+  const loader      = document.getElementById("loader");
+  const errorBox    = document.getElementById("error-box");
+  const results     = document.getElementById("results");
+  const metaRow     = document.getElementById("meta-row");
+  const predList    = document.getElementById("pred-list");
+
+  let selectedFile = null;
+
+  // ── Drag-and-drop ──
+  dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("drag-over"); });
+  dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
+  dropZone.addEventListener("drop", e => {
+    e.preventDefault();
+    dropZone.classList.remove("drag-over");
+    const file = e.dataTransfer.files[0];
+    if (file) loadFile(file);
+  });
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files[0]) loadFile(fileInput.files[0]);
+  });
+
+  function loadFile(file) {
+    selectedFile = file;
+    const url = URL.createObjectURL(file);
+    previewImg.src = url;
+    dropZone.style.display = "none";
+    previewWrap.style.display = "flex";
+    classifyBtn.disabled = false;
+    hideError(); clearResults();
+  }
+
+  clearBtn.addEventListener("click", () => {
+    selectedFile = null;
+    fileInput.value = "";
+    previewImg.src = "";
+    dropZone.style.display = "";
+    previewWrap.style.display = "none";
+    classifyBtn.disabled = true;
+    hideError(); clearResults();
+  });
+
+  // ── Classify ──
+  classifyBtn.addEventListener("click", async () => {
+    if (!selectedFile) return;
+    setLoading(true);
+    hideError(); clearResults();
+
+    const form = new FormData();
+    form.append("file", selectedFile);
+
+    try {
+      const resp = await fetch(`${API}/api/v1/classify`, { method: "POST", body: form });
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.detail || `HTTP ${resp.status}`);
+      }
+      const data = await resp.json();
+      renderResults(data);
+    } catch (e) {
+      showError(`${e.message}. Make sure the API is running at ${API}.`);
+    } finally {
+      setLoading(false);
+    }
+  });
+
+  function renderResults(data) {
+    const { predictions, inference_time_ms, model_version } = data;
+
+    metaRow.innerHTML = `
+      <div class="meta-pill">Inference <span>${inference_time_ms} ms</span></div>
+      <div class="meta-pill">Model <span>${model_version}</span></div>
+      <div class="meta-pill">Top-${predictions.length} results</div>
+    `;
+
+    predList.innerHTML = predictions.map((p, i) => {
+      const pct  = (p.confidence * 100).toFixed(1) + "%";
+      const isTop = i === 0;
+      return `
+        <div class="pred-item">
+          <div class="pred-label-row">
+            <span class="pred-label">${i + 1}. ${capitalize(p.label)}</span>
+            <span class="pred-conf ${isTop ? "top" : ""}">${pct}</span>
+          </div>
+          <div class="bar-track">
+            <div class="bar-fill ${isTop ? "top" : ""}" style="width:0"
+                 data-width="${p.confidence * 100}%"></div>
+          </div>
+        </div>`;
+    }).join("");
+
+    results.style.display = "block";
+
+    // Animate bars
+    requestAnimationFrame(() => {
+      document.querySelectorAll(".bar-fill").forEach(el => {
+        el.style.width = el.dataset.width;
+      });
+    });
+  }
+
+  function clearResults() {
+    results.style.display = "none";
+    predList.innerHTML = "";
+    metaRow.innerHTML = "";
+  }
+
+  function setLoading(on) {
+    loader.style.display = on ? "flex" : "none";
+    classifyBtn.disabled = on;
+  }
+
+  function showError(msg) {
+    errorBox.style.display = "block";
+    errorBox.textContent = "⚠ " + msg;
+  }
+
+  function hideError() {
+    errorBox.style.display = "none";
+  }
+
+  function capitalize(s) {
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  // ── Health check ──
+  async function loadModelInfo() {
+    try {
+      const resp = await fetch(`${API}/api/v1/health`);
+      if (!resp.ok) throw new Error();
+      const { model } = await resp.json();
+      document.getElementById("info-status").innerHTML =
+        `<span class="status-dot"></span>Healthy`;
+      document.getElementById("info-name").textContent    = model.name;
+      document.getElementById("info-size").textContent    = `${model.size_mb} MB`;
+      document.getElementById("info-classes").textContent = model.classes.toLocaleString();
+    } catch {
+      document.getElementById("info-status").textContent = "Offline";
+    }
+  }
+
+  loadModelInfo();
+</script>
+</body>
+</html>

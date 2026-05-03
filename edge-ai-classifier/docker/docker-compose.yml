@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+  classifier:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: edge-ai-classifier:latest
+    container_name: edge-ai-classifier
+    ports:
+      - "8000:8000"
+    environment:
+      - MODEL_PATH=/app/model/optimized/model.tflite
+      - TOP_K=5
+      - LOG_LEVEL=info
+      - WORKERS=2
+    volumes:
+      # Mount optimized model directory so you can hot-swap models
+      - ../model/optimized:/app/model/optimized:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Optional: nginx reverse proxy for production
+  # nginx:
+  #   image: nginx:alpine
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #   depends_on:
+  #     - classifier
